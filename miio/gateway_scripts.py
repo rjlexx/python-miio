@@ -32,6 +32,10 @@ action_id = {
     "flip180": lambda sid: action_prefix + "8" + sid_to_num(sid),
     "shakeair": lambda sid: action_prefix + "9" + sid_to_num(sid),
     "taptap": lambda sid: action_prefix + "10" + sid_to_num(sid),
+    "open": lambda sid: action_prefix + "11" + sid_to_num(sid),
+    "close": lambda sid: action_prefix + "12" + sid_to_num(sid),
+    "motion": lambda sid: action_prefix + "13" + sid_to_num(sid),
+    "click": lambda sid: action_prefix + "14" + sid_to_num(sid),
 }
 
 
@@ -86,6 +90,95 @@ def _inflate(
         ]
     ]
 
+def build_open(
+    source_sid,
+    target_ip,
+    target_encoded_token,
+    target_model=fake_device_model,
+    target_id=fake_device_id,
+    source_model="lumi.sensor_magnet.v2",
+):
+
+    return dumps(
+        _inflate(
+            "open",
+            "[1,6,1,0,[0,1],2,0]",
+            source_sid,
+            source_model,
+            target_id,
+            target_ip,
+            target_model,
+            target_encoded_token,
+        )
+    )
+
+def build_close(
+    source_sid,
+    target_ip,
+    target_encoded_token,
+    target_model=fake_device_model,
+    target_id=fake_device_id,
+    source_model="lumi.sensor_magnet.v2",
+):
+
+    return dumps(
+        _inflate(
+            "close",
+            "[1,6,1,0,[0,0],2,0]",
+            source_sid,
+            source_model,
+            target_id,
+            target_ip,
+            target_model,
+            target_encoded_token,
+        )
+    )
+	
+def build_click(
+    source_sid,
+    target_ip,
+    target_encoded_token,
+    target_model=fake_device_model,
+    target_id=fake_device_id,
+    source_model="lumi.sensor_switch.v2",
+):
+
+    return dumps(
+        _inflate(
+            "click",
+            "[1,6,1,0,[0,0],0,0]",
+            source_sid,
+            source_model,
+            target_id,
+            target_ip,
+            target_model,
+            target_encoded_token,
+            "click",
+        )
+    )
+	
+def build_motion(
+    source_sid,
+    target_ip,
+    target_encoded_token,
+    target_model=fake_device_model,
+    target_id=fake_device_id,
+    source_model="lumi.sensor_motion.v2",
+):
+
+    return dumps(
+        _inflate(
+            "motion",
+            "[1,1030,1,0,[0,1],0,0]",
+            source_sid,
+            source_model,
+            target_id,
+            target_ip,
+            target_model,
+            target_encoded_token,
+            "motion",
+        )
+    )
 
 def build_move(
     source_sid,
@@ -235,7 +328,7 @@ def build_singlepress(
     target_encoded_token,
     target_model=fake_device_model,
     target_id=fake_device_id,
-    source_model="lumi.sensor_switch.aq3",
+    source_model="lumi.sensor_switch.v2",
 ):
 
     return dumps(

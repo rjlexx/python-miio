@@ -25,6 +25,10 @@ from .gateway_scripts import (
     build_shakeair,
     build_singlepress,
     build_taptap,
+    build_click,
+    build_open,
+    build_close,
+    build_motion,
 )
 from .utils import brightness_and_color_to_int, int_to_brightness, int_to_rgb
 
@@ -53,9 +57,9 @@ class DeviceType(IntEnum):
 
     Unknown = -1
     Gateway = 0  # lumi.0
-    Switch = 1
-    Motion = 2
-    Magnet = 3
+    Switch = 1  # lumi.sensor_switch.v2
+    Motion = 2  # lumi.sensor_motion.v2
+    Magnet = 3  # lumi.sensor_magnet.v2
     SwitchTwoChannels = 7
     Cube = 8  # lumi.sensor_cube.v1
     SwitchOneChannel = 9  # lumi.ctrl_neutral1.v1
@@ -177,6 +181,9 @@ class Gateway(Device):
         """
         # from https://github.com/aholstenson/miio/issues/26
         device_type_mapping = {
+			Switch: Switch,
+			Magnet: Magnet,
+			Motion: Motion,
             DeviceType.AqaraRelayTwoChannels: AqaraRelayTwoChannels,
             DeviceType.Plug: AqaraPlug,
             DeviceType.SensorHT: SensorHT,
@@ -816,6 +823,87 @@ class SubDevice:
                 action_id.keys(),
             )
         )
+
+class Magnet(SubDevice):
+    """Subdevice Magnet specific properties and methods"""
+
+    properties = ["no_close"]
+
+    @attr.s(auto_attribs=True)
+    class props:
+        """Device specific properties"""
+
+        no_close: int = None  # Time during in open state, seconds
+
+    @command()
+    def update(self):
+        """Update all device properties"""
+        values = self.get_property_exp(self.properties)
+        self._props.no_close = values[0]
+
+    @command()
+    def install_open_script(self, encoded_token, ip=None):
+        """Generate and install script which captures open event and sends miio package to device"""
+        return self._gw.install_script(self.sid, build_open, encoded_token, ip)
+
+    @command()
+    def install_close_script(self, encoded_token, ip=None):
+        """Generate and install script which captures close event and sends miio package to device"""
+        return self._gw.install_script(self.sid, build_close, encoded_token, ip)
+
+
+class Motion(SubDevice):
+    """Subdevice Motion specific properties and methods"""
+
+    properties = ["no_move"]
+
+    @attr.s(auto_attribs=True)
+    class props:
+        """Device specific properties"""
+
+        no_move: int = None  # Time during in no motion state, seconds
+
+    @command()
+    def update(self):
+        """Update all device properties"""
+        values = self.get_property_exp(self.properties)
+        self._props.no_move = values[0]
+
+    @command()
+    def install_motion_script(self, encoded_token):
+        """Generate and install script which captures motion event and sends miio package to device"""
+        return self._gw.install_script(self.sid, build_motion, encoded_token)
+
+
+class Switch(SubDevice):
+    """Subdevice Switch specific properties and methods"""
+
+    properties = []
+
+    @command()
+    def install_click_script(self, encoded_token):
+        """Generate and install script which captures single click event and sends miio package to device"""
+        return self._gw.install_script(self.sid, build_singlepress, encoded_token)
+
+    @command()
+    def install_singlepress_script(self, encoded_token):
+        """Generate and install script which captures single press event and sends miio package to device"""
+        return self._gw.install_script(self.sid, build_singlepress, encoded_token)
+
+    @command()
+    def install_doublepress_script(self, encoded_token):
+        """Generate and install script which captures double press event and sends miio package to device"""
+        return self._gw.install_script(self.sid, build_doublepress, encoded_token)
+
+    @command()
+    def install_longpress_script(self, encoded_token):
+        """Generate and install script which captures loooong press event and sends miio package to device"""
+        return self._gw.install_script(self.sid, build_longpress, encoded_token)
+
+    @command()
+    def install_shake_script(self, encoded_token):
+        """Generate and install script which captures shake in air event and sends miio package to device"""
+        return self._gw.install_script(self.sid, build_shake, encoded_token)
 
 
 class AqaraHT(SubDevice):
