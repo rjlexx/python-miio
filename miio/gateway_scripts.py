@@ -8,7 +8,7 @@ def dumps(data):
     return dumps_orig(data, separators=separators)
 
 
-fake_device_id = "120009025"
+fake_device_id = "110009025"
 fake_device_model = "chuangmi.plug.v3"
 
 
@@ -36,6 +36,8 @@ action_id = {
     "close": lambda sid: action_prefix + "12" + sid_to_num(sid),
     "motion": lambda sid: action_prefix + "13" + sid_to_num(sid),
     "click": lambda sid: action_prefix + "14" + sid_to_num(sid),
+    "double_click": lambda sid: action_prefix + "15" + sid_to_num(sid),
+    "long_click_press": lambda sid: action_prefix + "16" + sid_to_num(sid),
 }
 
 
@@ -76,7 +78,7 @@ def _inflate(
                 ],
                 [
                     {
-                        "command": target_model + "." + action + "_" + source_id,
+                        "command": target_model + "." + action + "|" + source_id,
                         "did": target_id,
                         "extra": command_extra,
                         "id": randint(0, 999),
@@ -153,7 +155,50 @@ def build_click(
             target_ip,
             target_model,
             target_encoded_token,
-            "click",
+        )
+    )
+	
+def build_double_click(
+    source_sid,
+    target_ip,
+    target_encoded_token,
+    target_model=fake_device_model,
+    target_id=fake_device_id,
+    source_model="lumi.sensor_switch.v2",
+):
+
+    return dumps(
+        _inflate(
+            "double_click",
+            "[1,6,1,32768,[0,2],0,0]",
+            source_sid,
+            source_model,
+            target_id,
+            target_ip,
+            target_model,
+            target_encoded_token,
+        )
+    )
+	
+def build_long_click_press(
+    source_sid,
+    target_ip,
+    target_encoded_token,
+    target_model=fake_device_model,
+    target_id=fake_device_id,
+    source_model="lumi.sensor_switch.v2",
+):
+
+    return dumps(
+        _inflate(
+            "long_click_press",
+            "[1,6,1,32768,[0,8],0,0]",
+            source_sid,
+            source_model,
+            target_id,
+            target_ip,
+            target_model,
+            target_encoded_token,
         )
     )
 	
@@ -328,7 +373,7 @@ def build_singlepress(
     target_encoded_token,
     target_model=fake_device_model,
     target_id=fake_device_id,
-    source_model="lumi.sensor_switch.v2",
+    source_model="lumi.sensor_switch.aq3",
 ):
 
     return dumps(

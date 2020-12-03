@@ -13,23 +13,7 @@ from .click_common import EnumType, command, format_output
 from .device import Device
 from .exceptions import DeviceException
 from .fake_device import ipv4_nonloop_ips
-from .gateway_scripts import (
-    action_id,
-    build_doublepress,
-    build_flip90,
-    build_flip180,
-    build_longpress,
-    build_move,
-    build_rotate,
-    build_shake,
-    build_shakeair,
-    build_singlepress,
-    build_taptap,
-    build_click,
-    build_open,
-    build_close,
-    build_motion,
-)
+from .gateway_scripts import *
 from .utils import brightness_and_color_to_int, int_to_brightness, int_to_rgb
 
 _LOGGER = logging.getLogger(__name__)
@@ -269,7 +253,7 @@ class Gateway(Device):
                 "data_tkn": data_tkn,
                 "total": 1,
                 "type": "scene",
-            },
+            }
         )
 
     @command(click.argument("property"))
@@ -685,6 +669,14 @@ class SubDevice:
         except ValueError:
             self.type = DeviceType.Unknown
 
+    def __init__(self, gw: Gateway, sid, type) -> None:
+        self._gw = gw
+        self.sid = sid
+        self._battery = None
+        self._fw_ver = None
+        self._props = self.props()
+        self.type = type
+
     def __repr__(self):
         return "<Subdevice %s: %s fw: %s bat: %s props: %s>" % (
             self.device_type,
@@ -745,7 +737,7 @@ class SubDevice:
             response = self._gw.send("get_device_prop", [self.sid, property])
         except Exception as ex:
             raise GatewayException(
-                "Got an exception while fetching property %s" % (property)
+                "Got an exception while fetching property %s from %s" % (property, self.sid)
             ) from ex
 
         if not response:
@@ -756,15 +748,15 @@ class SubDevice:
         return response
 
     @command(click.argument("properties", nargs=-1))
-    def get_property_exp(self, properties):
+    def get_properties(self, properties):
         """Get the value of a bunch of properties of the subdevice."""
         try:
             response = self._gw.send(
-                "get_device_prop_exp", [[self.sid] + list(properties)]
-            ).pop()
+                "get_device_prop", [self.sid] + list(properties)
+            )
         except Exception as ex:
             raise GatewayException(
-                "Got an exception while fetching properties %s: %s" % (properties)
+                "Got an exception while fetching properties %s:" % ([self.sid] + list(properties))
             ) from ex
 
         if len(list(properties)) != len(response):
@@ -810,24 +802,38 @@ class SubDevice:
         return self._fw_ver
 
     @command()
-    def uninstall_scripts(self, encoded_token):
-        return dict(
-            map(
-                lambda action: (
-                    action,
-                    (
-                        action_id[action](self.sid),
-                        self._gw.x_del(action_id[action](self.sid)),
+    def uninstall_scripts(self, encoded_token, actions = None):
+        if actions is not None:
+            return dict(
+                map(
+                    lambda action: (
+                        action,
+                        (
+                            action_id[action](self.sid),
+                            self._gw.x_del(action_id[action](self.sid)),
+                        ),
                     ),
-                ),
-                action_id.keys(),
+                    actions,
+                )
             )
-        )
+        else:
+            return dict(
+                map(
+                    lambda action: (
+                        action,
+                        (
+                            action_id[action](self.sid),
+                            self._gw.x_del(action_id[action](self.sid)),
+                        ),
+                    ),
+                    action_id.keys(),
+                )
+            )
 
 class Magnet(SubDevice):
     """Subdevice Magnet specific properties and methods"""
 
-    properties = ["no_close"]
+    properties = ["voltage", "no_close"]
 
     @attr.s(auto_attribs=True)
     class props:
@@ -835,10 +841,13 @@ class Magnet(SubDevice):
 
         no_close: int = None  # Time during in open state, seconds
 
+    def __init__(self, gw: Gateway, sid) -> None:
+        super().__init__(gw, sid, DeviceType.Magnet)
+
     @command()
     def update(self):
         """Update all device properties"""
-        values = self.get_property_exp(self.properties)
+        values = self.get_properties(self.properties)
         self._props.no_close = values[0]
 
     @command()
@@ -851,59 +860,59 @@ class Magnet(SubDevice):
         """Generate and install script which captures close event and sends miio package to device"""
         return self._gw.install_script(self.sid, build_close, encoded_token, ip)
 
+    @command()
+    def uninstall_scripts(self, encoded_token):
+        return super().uninstall_scripts(encoded_token, ["open", "close"])
+
 
 class Motion(SubDevice):
     """Subdevice Motion specific properties and methods"""
 
-    properties = ["no_move"]
+    properties = ["voltage", "no_motion"]
 
     @attr.s(auto_attribs=True)
     class props:
         """Device specific properties"""
 
-        no_move: int = None  # Time during in no motion state, seconds
+        no_motion: int = None  # Time during in no motion state, seconds
+
+    def __init__(self, gw: Gateway, sid) -> None:
+        super().__init__(gw, sid, DeviceType.Motion)
 
     @command()
     def update(self):
         """Update all device properties"""
-        values = self.get_property_exp(self.properties)
-        self._props.no_move = values[0]
+        values = self.get_properties(self.properties)
+        self._props.no_motion = values[0]
 
     @command()
-    def install_motion_script(self, encoded_token):
+    def install_motion_script(self, encoded_token, ip=None):
         """Generate and install script which captures motion event and sends miio package to device"""
-        return self._gw.install_script(self.sid, build_motion, encoded_token)
+        return self._gw.install_script(self.sid, build_motion, encoded_token, ip)
 
 
 class Switch(SubDevice):
     """Subdevice Switch specific properties and methods"""
 
-    properties = []
+    properties = ["voltage"]
+
+    def __init__(self, gw: Gateway, sid) -> None:
+        super().__init__(gw, sid, DeviceType.Switch)
 
     @command()
-    def install_click_script(self, encoded_token):
+    def install_click_script(self, encoded_token, ip=None):
         """Generate and install script which captures single click event and sends miio package to device"""
-        return self._gw.install_script(self.sid, build_singlepress, encoded_token)
+        return self._gw.install_script(self.sid, build_click, encoded_token, ip)
 
     @command()
-    def install_singlepress_script(self, encoded_token):
-        """Generate and install script which captures single press event and sends miio package to device"""
-        return self._gw.install_script(self.sid, build_singlepress, encoded_token)
+    def install_double_click_script(self, encoded_token, ip=None):
+        """Generate and install script which captures double click event and sends miio package to device"""
+        return self._gw.install_script(self.sid, build_double_click, encoded_token, ip)
 
     @command()
-    def install_doublepress_script(self, encoded_token):
-        """Generate and install script which captures double press event and sends miio package to device"""
-        return self._gw.install_script(self.sid, build_doublepress, encoded_token)
-
-    @command()
-    def install_longpress_script(self, encoded_token):
-        """Generate and install script which captures loooong press event and sends miio package to device"""
-        return self._gw.install_script(self.sid, build_longpress, encoded_token)
-
-    @command()
-    def install_shake_script(self, encoded_token):
-        """Generate and install script which captures shake in air event and sends miio package to device"""
-        return self._gw.install_script(self.sid, build_shake, encoded_token)
+    def install_long_click_press_script(self, encoded_token, ip=None):
+        """Generate and install script which captures long click press event and sends miio package to device"""
+        return self._gw.install_script(self.sid, build_long_click_press, encoded_token, ip)
 
 
 class AqaraHT(SubDevice):
@@ -923,7 +932,7 @@ class AqaraHT(SubDevice):
     @command()
     def update(self):
         """Update all device properties"""
-        values = self.get_property_exp(self.properties)
+        values = self.get_properties(self.properties)
         try:
             self._props.temperature = values[0] / 100
             self._props.humidity = values[1] / 100
@@ -952,7 +961,7 @@ class SensorHT(SubDevice):
     @command()
     def update(self):
         """Update all device properties"""
-        values = self.get_property_exp(self.properties)
+        values = self.get_properties(self.properties)
         try:
             self._props.temperature = values[0] / 100
             self._props.humidity = values[1] / 100
@@ -978,7 +987,7 @@ class AqaraMagnet(SubDevice):
     @command()
     def update(self):
         """Update all device properties"""
-        values = self.get_property_exp(self.properties)
+        values = self.get_properties(self.properties)
         self._props.status = values[0]
 
 
@@ -999,7 +1008,7 @@ class AqaraPlug(SubDevice):
     @command()
     def update(self):
         """Update all device properties"""
-        values = self.get_property_exp(self.properties)
+        values = self.get_properties(self.properties)
         self._props.power = values[0]
         self._props.status = values[1]
         self._props.load_power = values[2]
@@ -1034,7 +1043,7 @@ class AqaraRelayTwoChannels(SubDevice):
     @command()
     def update(self):
         """Update all device properties"""
-        values = self.get_property_exp(self.properties)
+        values = self.get_properties(self.properties)
         self._props.load_power = values[0]
         self._props.status_ch0 = values[1]
         self._props.status_ch1 = values[2]
@@ -1063,7 +1072,7 @@ class AqaraSwitchOneChannel(SubDevice):
     @command()
     def update(self):
         """Update all device properties"""
-        values = self.get_property_exp(self.properties)
+        values = self.get_properties(self.properties)
         self._props.status = values[0]
         self._props.load_power = values[1]
 
@@ -1084,7 +1093,7 @@ class AqaraSwitchTwoChannels(SubDevice):
     @command()
     def update(self):
         """Update all device properties"""
-        values = self.get_property_exp(self.properties)
+        values = self.get_properties(self.properties)
         self._props.status_ch0 = values[0]
         self._props.status_ch1 = values[1]
         self._props.load_power = values[2]
@@ -1166,7 +1175,7 @@ class AqaraWallOutlet(SubDevice):
     @command()
     def update(self):
         """Update all device properties"""
-        values = self.get_property_exp(self.properties)
+        values = self.get_properties(self.properties)
         self._props.status = values[0]
         self._props.load_power = values[1]
 
